@@ -1,13 +1,18 @@
 import os
 from selenium import webdriver
+import urllib
+import csv
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
-config_webdriver = "/Users/mbrown/Downloads/chromedriver/chromedriver"
+webdriver_path = "/Users/mbrown/Downloads/chromedriver/"
+config_webdriver = webdriver_path + "chromedriver"
+abp_extension = webdriver_path + "Adblock-Plus_v1.9.4.crx"
 url = "http://force-of-will-tcg.wikia.com/wiki/The_Crimson_Moon%27s_Fairy_Tale_set_gallery"
+output_file_name = 'grim.csv'
 
 
 class FOWScraper():
@@ -17,15 +22,31 @@ class FOWScraper():
 
     def setup(self, url):
         os.environ["webdriver.chrome.driver"] = self.web_driver
-        self.browser = webdriver.Chrome(self.web_driver)
+        options = webdriver.ChromeOptions()
+        options.add_extension(abp_extension)
+        self.browser = webdriver.Chrome(self.web_driver, chrome_options=options)
         self.browser.get(url)
 
     def scrape(self):
+        card_list = self.get_card_url_list()
+        card_info_list = []
+        for card_url in card_list:
+            card_info = self.smart_parse(card_url)
+            card_info_list.append(card_info)
 
+        self.output_to_csv(card_info_list)
 
-        return [{}]
+        return card_info_list
+
+    def output_to_csv(self, card_info_list):
+        keys = card_info_list[0].keys()
+        with open(output_file_name, 'wb') as output_file:
+            dict_writer = csv.DictWriter(output_file, keys)
+            dict_writer.writeheader()
+            dict_writer.writerows(card_info_list)
 
     def get_card_url_list(self):
+        print "getting card list..."
         card_list = []
 
         gallery_div_id = "gallery-1"
@@ -41,12 +62,16 @@ class FOWScraper():
 
         return card_list
 
-    def get_card_info(self, url):
+    def smart_parse(self, url):
+        print "getting smart card info for %s" % url
         card_info = {
             'name': None,
             'attribute': None,
             'card_type': None,
             'race': None,
+            'cost': None,
+            'attack': None,
+            'defense': None,
             'abilities': None,
             'flavor': None,
             'cluster': None,
@@ -62,32 +87,48 @@ class FOWScraper():
         name = table.find_element_by_xpath('./tbody/tr[1]/th').text
         card_info['name'] = name
 
-        #Get attribute
-        attribute = table.find_element_by_xpath('./tbody/tr[3]/td[2]/a[1]').text
-        card_info['attribute'] = attribute
+        row_list = table.find_elements_by_xpath('./tbody/tr')
+        for row in row_list:
+            columns = row.find_elements_by_xpath('./td')
+            self.parse_table_row(card_info, columns)
 
-        #Get card_type
-        card_type = table.find_element_by_xpath('./tbody/tr[4]/td[2]/a[1]').text
-        card_info['card_type'] = card_type
+        raw_set_and_rarity = row_list[-1].find_element_by_xpath('./td')
+        self.parse_set_and_rarity(card_info, raw_set_and_rarity)
 
-        #Get race
-        race = table.find_element_by_xpath('./tbody/tr[5]/td[2]/a[1]').text
-        card_info['race'] = race
-
-        #get abilities
-        abilities = table.find_element_by_xpath('./tbody/tr[5]/td[2]').text
-        card_info['abilities'] = abilities
-
-        #get flavor
-        flavor = table.find_element_by_xpath('./tbody/tr[6]/td[2]').text
-        card_info['flavor'] = flavor
-
-        raw_set_data = table.find_element_by_xpath('./tbody/tr[9]/td')
-        self.parse_set_and_rarity(card_info, raw_set_data)
+        self.save_image_detail(card_info, table)
 
         return card_info
 
-    def parse_set_and_rarity(self, card_info, raw_set_data):
+    def parse_table_row(self, card_info, columns):
+        if len(columns) < 2:
+            return
+
+        column_label = columns[0].text
+        card_data = columns[1].text
+
+        if column_label == "Attribute:":
+            card_info['attribute'] = card_data
+        elif column_label == "Card Type:":
+            card_info['card_type'] = card_data
+        elif column_label == "Race:":
+            card_info['race'] = card_data
+        elif column_label == "Cost:":
+            card_info['cost'] = card_data
+        elif column_label == "ATK/DEF:":
+            atk_def = card_data.split('/')
+            atk = atk_def[0]
+            defense = atk_def[1]
+            card_info['attack'] = atk
+            card_info['defense'] = defense
+        elif column_label == "Abilities:":
+            card_info['abilities'] = card_data
+        elif column_label == "Flavor Text:":
+            card_info['flavor'] = card_data
+        else:
+            print "UNUSED ROW: " + column_label
+
+    @staticmethod
+    def parse_set_and_rarity(card_info, raw_set_data):
         #get cluster
         cluster = raw_set_data.find_element_by_xpath('./b').text
         card_info['cluster'] = cluster
@@ -107,6 +148,18 @@ class FOWScraper():
         id = id_and_rarity_parts[0].replace('(', '')
         card_info['id'] = id
 
+    @staticmethod
+    def save_image_detail(card_info, web_table):
+        img_src = web_table.find_element_by_xpath('./tbody/tr[2]/td/div/a/img').get_attribute('src')
+        directory_path = "fow_images/" + card_info['cluster'] + "/" + card_info['set']
+        if not os.path.exists(directory_path):
+            os.makedirs(directory_path)
+
+        file_path = directory_path + "/" + card_info['id'] + ".jpg"
+        urllib.urlretrieve(img_src, file_path)
+
+        card_info['image_path'] = file_path
+
     def reset(self):
         if self.browser is not None:
             self.browser.quit()
@@ -115,11 +168,12 @@ class FOWScraper():
 
 
 if __name__ == '__main__':
-    card_url = "http://force-of-will-tcg.wikia.com/wiki/Grimm,_the_Fairy_Tale_Prince"
-
     scraper = FOWScraper()
+    card_url =  "http://force-of-will-tcg.wikia.com/wiki/Aesop,_the_Prince%27s_Tutor"
     try:
         scraper.setup(url)
-        print scraper.get_card_info(card_url)
+        # print scraper.smart_parse(card_url)
+        scraper.scrape()
     finally:
+        # pass
         scraper.reset()

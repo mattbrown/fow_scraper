@@ -58,3 +58,6 @@ target/
 
 #intellij
 .idea/
+
+#project
+.fow_images/
