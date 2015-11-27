@@ -107,7 +107,6 @@ class FOWScraper():
         id = id_and_rarity_parts[0].replace('(', '')
         card_info['id'] = id
 
-
     def reset(self):
         if self.browser is not None:
             self.browser.quit()
