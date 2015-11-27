@@ -77,7 +77,8 @@ class FOWScraper():
             'cluster': None,
             'set': None,
             'rarity': None,
-            'id': None
+            'id': None,
+            'wiki_link': url
         }
 
         self.browser.get(url)
@@ -104,7 +105,7 @@ class FOWScraper():
             return
 
         column_label = columns[0].text
-        card_data = columns[1].text
+        card_data = columns[1].text.encode("utf-8")
 
         if column_label == "Attribute:":
             card_info['attribute'] = card_data
@@ -151,11 +152,15 @@ class FOWScraper():
     @staticmethod
     def save_image_detail(card_info, web_table):
         img_src = web_table.find_element_by_xpath('./tbody/tr[2]/td/div/a/img').get_attribute('src')
+        scale_index = img_src.find('/scale-to-width')
+        img_src = img_src[:scale_index]
         directory_path = "fow_images/" + card_info['cluster'] + "/" + card_info['set']
         if not os.path.exists(directory_path):
             os.makedirs(directory_path)
 
-        file_path = directory_path + "/" + card_info['id'] + ".jpg"
+        file_name = card_info['id'].replace('/', '-')
+        file_path = directory_path + "/" + file_name + ".jpg"
+
         urllib.urlretrieve(img_src, file_path)
 
         card_info['image_path'] = file_path
@@ -169,10 +174,12 @@ class FOWScraper():
 
 if __name__ == '__main__':
     scraper = FOWScraper()
-    card_url =  "http://force-of-will-tcg.wikia.com/wiki/Aesop,_the_Prince%27s_Tutor"
+    card_url = "http://force-of-will-tcg.wikia.com/wiki/Aesop,_the_Prince%27s_Tutor"
     try:
         scraper.setup(url)
-        # print scraper.smart_parse(card_url)
+        # card_data =  scraper.smart_parse(card_url)
+        # print card_data
+        # scraper.output_to_csv([card_data])
         scraper.scrape()
     finally:
         # pass
