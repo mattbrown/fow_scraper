@@ -11,8 +11,16 @@ from selenium.common.exceptions import TimeoutException
 webdriver_path = "/Users/mbrown/Downloads/chromedriver/"
 config_webdriver = webdriver_path + "chromedriver"
 abp_extension = webdriver_path + "Adblock-Plus_v1.9.4.crx"
-url = "http://force-of-will-tcg.wikia.com/wiki/The_Crimson_Moon%27s_Fairy_Tale_set_gallery"
-output_file_name = 'grim.csv'
+output_file_name = 'fow_grim_alice1.csv'
+
+url_list = [
+    # "http://force-of-will-tcg.wikia.com/wiki/The_Crimson_Moon%27s_Fairy_Tale_set_gallery",
+    # "http://force-of-will-tcg.wikia.com/wiki/The_Castle_of_Heaven_and_The_Two_Towers_set_gallery",
+    # "http://force-of-will-tcg.wikia.com/wiki/The_Moon_Priestess_Returns_set_gallery",
+    # "http://force-of-will-tcg.wikia.com/wiki/The_Millennia_of_Ages_set_gallery",
+    # "http://force-of-will-tcg.wikia.com/wiki/Vingolf:_Engage_Knights_set_gallery",
+    "http://force-of-will-tcg.wikia.com/wiki/The_Seven_Kings_of_the_Lands_set_gallery",
+]
 
 
 class FOWScraper():
@@ -40,6 +48,7 @@ class FOWScraper():
 
     def output_to_csv(self, card_info_list):
         keys = card_info_list[0].keys()
+        output_file_name = card_info_list[0]['set'] + ".csv"
         with open(output_file_name, 'wb') as output_file:
             dict_writer = csv.DictWriter(output_file, keys)
             dict_writer.writeheader()
@@ -114,7 +123,7 @@ class FOWScraper():
         elif column_label == "Race:":
             card_info['race'] = card_data
         elif column_label == "Cost:":
-            card_info['cost'] = card_data
+            card_info['cost'] = self.parse_cost(columns[1])
         elif column_label == "ATK/DEF:":
             atk_def = card_data.split('/')
             atk = atk_def[0]
@@ -127,6 +136,13 @@ class FOWScraper():
             card_info['flavor'] = card_data
         else:
             print "UNUSED ROW: " + column_label
+
+    def parse_cost(self, cost_column):
+        cost = []
+        for imgs in cost_column.find_elements_by_xpath('./a/img'):
+            alt_data = imgs.get_attribute("alt")
+            cost.append(alt_data)
+        return cost
 
     @staticmethod
     def parse_set_and_rarity(card_info, raw_set_data):
@@ -176,11 +192,12 @@ if __name__ == '__main__':
     scraper = FOWScraper()
     card_url = "http://force-of-will-tcg.wikia.com/wiki/Aesop,_the_Prince%27s_Tutor"
     try:
-        scraper.setup(url)
+        for set_url in url_list:
+            scraper.setup(set_url)
+            scraper.scrape()
         # card_data =  scraper.smart_parse(card_url)
         # print card_data
         # scraper.output_to_csv([card_data])
-        scraper.scrape()
     finally:
         # pass
         scraper.reset()
